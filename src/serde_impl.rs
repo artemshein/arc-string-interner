@@ -18,7 +18,7 @@ where
     {
         let mut seq = serializer.serialize_seq(Some(self.len()))?;
         for s in self.iter_values() {
-            seq.serialize_element(s)?
+            seq.serialize_element(s.as_ref())?
         }
         seq.end()
     }

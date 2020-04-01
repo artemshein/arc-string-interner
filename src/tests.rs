@@ -230,7 +230,7 @@ mod resolve {
     fn simple() {
         let mut interner = DefaultStringInterner::new();
         let sym = interner.get_or_intern("foo");
-        assert_eq!(interner.resolve(sym), Some("foo"));
+        assert_eq!(interner.resolve(sym).map(AsRef::as_ref), Some("foo"));
     }
 
     #[test]
@@ -243,7 +243,7 @@ mod resolve {
     fn unchecked() {
         let mut interner = DefaultStringInterner::new();
         let sym = interner.get_or_intern("foo");
-        assert_eq!(unsafe { interner.resolve_unchecked(sym) }, "foo");
+        assert_eq!(unsafe { interner.resolve_unchecked(sym) }.as_ref(), "foo");
     }
 }
 
@@ -284,9 +284,18 @@ mod iter {
         let interner: DefaultStringInterner =
             vec!["foo", "bar", "baz", "foo"].into_iter().collect();
         let mut iter = interner.iter();
-        assert_eq!(iter.next(), Some((Sym::from_usize(0), "foo")));
-        assert_eq!(iter.next(), Some((Sym::from_usize(1), "bar")));
-        assert_eq!(iter.next(), Some((Sym::from_usize(2), "baz")));
+        assert_eq!(
+            iter.next().map(|(i, v)| (i, v.as_ref())),
+            Some((Sym::from_usize(0), "foo"))
+        );
+        assert_eq!(
+            iter.next().map(|(i, v)| (i, v.as_ref())),
+            Some((Sym::from_usize(1), "bar"))
+        );
+        assert_eq!(
+            iter.next().map(|(i, v)| (i, v.as_ref())),
+            Some((Sym::from_usize(2), "baz"))
+        );
         assert_eq!(iter.next(), None);
     }
 }
@@ -304,9 +313,9 @@ mod iter_values {
         let interner: DefaultStringInterner =
             vec!["foo", "bar", "baz", "foo"].into_iter().collect();
         let mut iter = interner.iter_values();
-        assert_eq!(iter.next(), Some("foo"));
-        assert_eq!(iter.next(), Some("bar"));
-        assert_eq!(iter.next(), Some("baz"));
+        assert_eq!(iter.next().map(AsRef::as_ref), Some("foo"));
+        assert_eq!(iter.next().map(AsRef::as_ref), Some("bar"));
+        assert_eq!(iter.next().map(AsRef::as_ref), Some("baz"));
         assert_eq!(iter.next(), None);
     }
 }
@@ -324,9 +333,18 @@ mod into_iter {
         let interner: DefaultStringInterner =
             vec!["foo", "bar", "baz", "foo"].into_iter().collect();
         let mut iter = interner.into_iter();
-        assert_eq!(iter.next(), Some((Sym::from_usize(0), String::from("foo"))));
-        assert_eq!(iter.next(), Some((Sym::from_usize(1), String::from("bar"))));
-        assert_eq!(iter.next(), Some((Sym::from_usize(2), String::from("baz"))));
+        assert_eq!(
+            iter.next().map(|(i, v)| (i, v.to_string())),
+            Some((Sym::from_usize(0), "foo".to_owned()))
+        );
+        assert_eq!(
+            iter.next().map(|(i, v)| (i, v.to_string())),
+            Some((Sym::from_usize(1), "bar".to_owned()))
+        );
+        assert_eq!(
+            iter.next().map(|(i, v)| (i, v.to_string())),
+            Some((Sym::from_usize(2), "baz".to_owned()))
+        );
         assert_eq!(iter.next(), None);
     }
 }
@@ -456,7 +474,7 @@ mod clone_and_drop {
 
         let mut new = old.clone();
         for (&s, &sym) in strings.iter().zip(&syms) {
-            assert_eq!(new.resolve(sym), Some(s));
+            assert_eq!(new.resolve(sym).map(AsRef::as_ref), Some(s));
             assert_eq!(new.get_or_intern(s), sym);
         }
     }

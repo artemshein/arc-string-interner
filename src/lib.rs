@@ -1,5 +1,5 @@
 #![cfg_attr(all(feature = "bench", test), feature(test))]
-#![doc(html_root_url = "https://docs.rs/crate/string-interner/0.7.1")]
+#![doc(html_root_url = "https://docs.rs/crate/arc-string-interner/0.1.0")]
 #![deny(missing_docs)]
 
 //! Caches strings efficiently, with minimal memory footprint and associates them with unique symbols.
@@ -8,7 +8,7 @@
 //! ### Example: Interning & Symbols
 //!
 //! ```
-//! use string_interner::StringInterner;
+//! use arc_string_interner::StringInterner;
 //!
 //! let mut interner = StringInterner::default();
 //! let sym0 = interner.get_or_intern("Elephant");
@@ -24,7 +24,7 @@
 //! ### Example: Creation by `FromIterator`
 //!
 //! ```
-//! # use string_interner::DefaultStringInterner;
+//! # use arc_string_interner::DefaultStringInterner;
 //! let interner = vec!["Elephant", "Tiger", "Horse", "Tiger"]
 //! 	.into_iter()
 //! 	.collect::<DefaultStringInterner>();
@@ -33,16 +33,16 @@
 //! ### Example: Look-up
 //!
 //! ```
-//! # use string_interner::StringInterner;
+//! # use arc_string_interner::StringInterner;
 //! let mut interner = StringInterner::default();
 //! let sym = interner.get_or_intern("Banana");
-//! assert_eq!(interner.resolve(sym), Some("Banana"));
+//! assert_eq!(interner.resolve(sym).map(ToString::to_string), Some("Banana".to_owned()));
 //! ```
 //!
 //! ### Example: Iteration
 //!
 //! ```
-//! # use string_interner::DefaultStringInterner;
+//! # use arc_string_interner::DefaultStringInterner;
 //! let interner = vec!["Earth", "Water", "Fire", "Air"]
 //! 	.into_iter()
 //! 	.collect::<DefaultStringInterner>();
@@ -69,7 +69,9 @@ use std::{
     hash::{BuildHasher, Hash, Hasher},
     iter, marker,
     num::NonZeroU32,
-    slice, u32, vec,
+    slice,
+    sync::Arc,
+    u32, vec,
 };
 
 /// Types implementing this trait are able to act as symbols for string interners.
@@ -192,7 +194,7 @@ where
     H: BuildHasher,
 {
     map: HashMap<InternalStrRef, S, H>,
-    values: Vec<Box<str>>,
+    values: Vec<Arc<str>>,
 }
 
 impl<S, H> PartialEq for StringInterner<S, H>
@@ -346,7 +348,7 @@ where
         T: Into<String> + AsRef<str>,
     {
         let new_id: S = self.make_symbol();
-        let new_boxed_val = new_val.into().into_boxed_str();
+        let new_boxed_val: Arc<str> = new_val.into().into();
         let new_ref: InternalStrRef = new_boxed_val.as_ref().into();
         self.values.push(new_boxed_val);
         self.map.insert(new_ref, new_id);
@@ -361,10 +363,8 @@ where
     /// Returns the string slice associated with the given symbol if available,
     /// otherwise returns `None`.
     #[inline]
-    pub fn resolve(&self, symbol: S) -> Option<&str> {
-        self.values
-            .get(symbol.to_usize())
-            .map(|boxed_str| boxed_str.as_ref())
+    pub fn resolve(&self, symbol: S) -> Option<&Arc<str>> {
+        self.values.get(symbol.to_usize())
     }
 
     /// Returns the string associated with the given symbol.
@@ -379,8 +379,8 @@ where
     /// This will result in undefined behaviour if the given symbol
     /// had no associated string for this interner instance.
     #[inline]
-    pub unsafe fn resolve_unchecked(&self, symbol: S) -> &str {
-        self.values.get_unchecked(symbol.to_usize()).as_ref()
+    pub unsafe fn resolve_unchecked(&self, symbol: S) -> &Arc<str> {
+        self.values.get_unchecked(symbol.to_usize())
     }
 
     /// Returns the symbol associated with the given string for this interner
@@ -457,7 +457,7 @@ where
 
 /// Iterator over the pairs of associated symbols and interned strings for a `StringInterner`.
 pub struct Iter<'a, S> {
-    iter: iter::Enumerate<slice::Iter<'a, Box<str>>>,
+    iter: iter::Enumerate<slice::Iter<'a, Arc<str>>>,
     mark: marker::PhantomData<S>,
 }
 
@@ -483,13 +483,13 @@ impl<'a, S> Iterator for Iter<'a, S>
 where
     S: Symbol + 'a,
 {
-    type Item = (S, &'a str);
+    type Item = (S, &'a Arc<str>);
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         self.iter
             .next()
-            .map(|(num, boxed_str)| (S::from_usize(num), boxed_str.as_ref()))
+            .map(|(num, boxed_str)| (S::from_usize(num), boxed_str))
     }
 
     #[inline]
@@ -503,7 +503,7 @@ pub struct Values<'a, S>
 where
     S: Symbol + 'a,
 {
-    iter: slice::Iter<'a, Box<str>>,
+    iter: slice::Iter<'a, Arc<str>>,
     mark: marker::PhantomData<S>,
 }
 
@@ -528,11 +528,11 @@ impl<'a, S> Iterator for Values<'a, S>
 where
     S: Symbol + 'a,
 {
-    type Item = &'a str;
+    type Item = &'a Arc<str>;
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next().map(|boxed_str| boxed_str.as_ref())
+        self.iter.next()
     }
 
     #[inline]
@@ -546,7 +546,7 @@ where
     S: Symbol,
     H: BuildHasher,
 {
-    type Item = (S, String);
+    type Item = (S, Arc<str>);
     type IntoIter = IntoIter<S>;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -564,7 +564,7 @@ pub struct IntoIter<S>
 where
     S: Symbol,
 {
-    iter: iter::Enumerate<vec::IntoIter<Box<str>>>,
+    iter: iter::Enumerate<vec::IntoIter<Arc<str>>>,
     mark: marker::PhantomData<S>,
 }
 
@@ -572,12 +572,12 @@ impl<S> Iterator for IntoIter<S>
 where
     S: Symbol,
 {
-    type Item = (S, String);
+    type Item = (S, Arc<str>);
 
     fn next(&mut self) -> Option<Self::Item> {
         self.iter
             .next()
-            .map(|(num, boxed_str)| (S::from_usize(num), boxed_str.into_string()))
+            .map(|(num, boxed_str)| (S::from_usize(num), boxed_str))
     }
 
     #[inline]
