@@ -65,7 +65,7 @@ mod serde_impl;
 
 use std::iter::FromIterator;
 use std::{
-    collections::{hash_map::RandomState, HashMap},
+    collections::{hash_map::{RandomState, Entry}, HashMap},
     hash::{BuildHasher, Hash, Hasher},
     iter, marker,
     num::NonZeroU32,
@@ -334,25 +334,17 @@ where
     where
         T: Into<String> + AsRef<str>,
     {
-        match self.map.get(&val.as_ref().into()) {
-            Some(&sym) => sym,
-            None => self.intern(val),
+        let StringInterner { ref mut map, values } = self;
+        match map.entry(val.as_ref().into()) {
+            Entry::Occupied(e) => *e.get(),
+            Entry::Vacant(v) => {
+                let new_id: S = S::from_usize(values.len());
+                let new_boxed_val: Arc<str> = val.into().into();
+                values.push(new_boxed_val);
+                v.insert(new_id);
+                new_id
+            }
         }
-    }
-
-    /// Interns the given value and ignores collissions.
-    ///
-    /// Returns a symbol to access it within this interner.
-    fn intern<T>(&mut self, new_val: T) -> S
-    where
-        T: Into<String> + AsRef<str>,
-    {
-        let new_id: S = self.make_symbol();
-        let new_boxed_val: Arc<str> = new_val.into().into();
-        let new_ref: InternalStrRef = new_boxed_val.as_ref().into();
-        self.values.push(new_boxed_val);
-        self.map.insert(new_ref, new_id);
-        new_id
     }
 
     /// Creates a new symbol for the current state of the interner.

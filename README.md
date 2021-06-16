@@ -41,6 +41,12 @@ additional terms or conditions.
 
 ## Changelog
 
+- 0.1.1
+
+    - Optimized get_or_intern to make get only once
+
+## Original crate changelog
+
 - 0.7.1
 
     - **CRITICAL** fix use after free bug in `StringInterner::clone()`
