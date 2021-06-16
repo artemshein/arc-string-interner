@@ -347,11 +347,6 @@ where
         }
     }
 
-    /// Creates a new symbol for the current state of the interner.
-    fn make_symbol(&self) -> S {
-        S::from_usize(self.len())
-    }
-
     /// Returns the string slice associated with the given symbol if available,
     /// otherwise returns `None`.
     #[inline]
